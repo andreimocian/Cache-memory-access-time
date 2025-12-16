@@ -31,7 +31,7 @@ void ikj_multiply_forced_miss(int n)
             {
                 _mm_clflush(&B[k][j]);
                 _mm_clflush(&C[i][j]);
-                _mm_mfence(); //Ensure compiler does not optimize
+                _mm_mfence(); // Ensure compiler does not optimize
 
                 C[i][j] += A[i][k] * B[k][j];
             }
@@ -58,7 +58,7 @@ void ikj_flush_only(int n)
     }
 }
 
-int main()
+int main(int argc, char **argv)
 {
     if (!QueryPerformanceFrequency(&freq))
     {
@@ -77,19 +77,36 @@ int main()
             }
         }
 
-        QueryPerformanceCounter(&start);
-        ikj_flush_only(n);
-        QueryPerformanceCounter(&end);
+        double elapsed;
 
-        double elapsed_flush = (double)(end.QuadPart - start.QuadPart) / freq.QuadPart;
+        switch (argv[1][0])
+        {
+        case 'm':
+            QueryPerformanceCounter(&start);
+            ikj_multiply(n);
+            QueryPerformanceCounter(&end);
 
-        QueryPerformanceCounter(&start);
-        ikj_multiply_forced_miss(n);
-        QueryPerformanceCounter(&end);
+            elapsed = (double)(end.QuadPart - start.QuadPart) / freq.QuadPart;
+            printf("size %d, %f seconds\n", n * n * 8 * 3, elapsed);
+            break;
+        case 'f':
+            QueryPerformanceCounter(&start);
+            ikj_flush_only(n);
+            QueryPerformanceCounter(&end);
 
-        double elapsed = (double)(end.QuadPart - start.QuadPart) / freq.QuadPart;
+            double elapsed_flush = (double)(end.QuadPart - start.QuadPart) / freq.QuadPart;
 
-        printf("size %d, %f seconds\n", n * n * 8 * 3, elapsed - elapsed_flush);
+            QueryPerformanceCounter(&start);
+            ikj_multiply_forced_miss(n);
+            QueryPerformanceCounter(&end);
+
+            elapsed = (double)(end.QuadPart - start.QuadPart) / freq.QuadPart;
+
+            printf("size %d, %f seconds\n", n * n * 8 * 3, elapsed - elapsed_flush);
+            break;
+        default:
+            return 1;
+        }
     }
     return 0;
 }

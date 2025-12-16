@@ -8,4 +8,4 @@ matrix-mul:
 
 force-miss-mul:
 	gcc -o force-miss-mul force-miss-mul.c -O0 -std=c11
-	force-miss-mul.exe
+	force-miss-mul.exe $(ARGV)
