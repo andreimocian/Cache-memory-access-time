@@ -69,8 +69,13 @@ int main(int argc, char **argv)
     printf("L2 size: %llu bytes\n", L2_size);
     printf("L3 size: %llu bytes\n", L3_size);
 
-    const unsigned long FINAL_SIZE = (unsigned long)sqrt(L3_size / (3.0 * sizeof(double)));
-
+    unsigned long max_n = (unsigned long)sqrt(L3_size / (3.0 * sizeof(double)));
+    
+    unsigned long FINAL_SIZE = 1;
+    while ((FINAL_SIZE << 1) <= max_n) {
+        FINAL_SIZE <<= 1;
+    }
+    
     if (!QueryPerformanceFrequency(&freq))
     {
         return 1;
