@@ -1,10 +1,12 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
 import subprocess
+from datetime import datetime
 
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_pdf import PdfPages
 
 
 class LinkedListPage:
@@ -47,6 +49,9 @@ class LinkedListPage:
 
         self.run_btn = ttk.Button(controls, text="Run", command=self.run_selected)
         self.run_btn.pack(side="left", padx=14)
+
+        self.export_btn = ttk.Button(controls, text="Export to PDF", command=self.export_to_pdf, state="disabled")
+        self.export_btn.pack(side="left", padx=5)
 
         self.status = tk.Label(self.frame, text="Ready.", bg="#f0f0f0", fg="#333")
         self.status.pack(anchor="w", pady=(0, 10))
@@ -104,6 +109,22 @@ class LinkedListPage:
         series = [(label, sizes, self._ns_per_node(sizes, secs))]
         self._plot(series, cache_sizes)
 
+        self.last_data = {
+            'mode': label,
+            'sizes': sizes,
+            'times': secs,
+            'cache_sizes': cache_sizes
+        }
+        self.export_btn.config(state="normal")
+
+        self.last_data = {
+            'mode': label,
+            'sizes': sizes,
+            'times': secs,
+            'cache_sizes': cache_sizes
+        }
+        self.export_btn.config(state="normal")
+
         self.status.config(text="Done.")
         self.run_btn.config(state="normal")
 
@@ -125,7 +146,6 @@ class LinkedListPage:
             line = line.strip()
             if not line:
                 continue
-            # Parse cache size lines
             if 'L1 size:' in line:
                 cache_sizes['L1'] = int(line.split(':')[1].split()[0])
                 continue
@@ -135,7 +155,6 @@ class LinkedListPage:
             elif 'L3 size:' in line:
                 cache_sizes['L3'] = int(line.split(':')[1].split()[0])
                 continue
-            # Parse data lines
             parts = line.split()
             if len(parts) != 2:
                 continue
@@ -150,9 +169,6 @@ class LinkedListPage:
     def _plot(self, series, cache_sizes=None):
         self.ax.clear()
 
-        print(cache_sizes)
-
-        # if cache_sizes:
         if 'L1' in cache_sizes:
             self.ax.axvline(cache_sizes['L1'], color='gray', linestyle='--', 
                             label=f"L1 = {cache_sizes['L1'] // (1024*1024)} MB")
@@ -163,7 +179,6 @@ class LinkedListPage:
             self.ax.axvline(cache_sizes['L3'], color='red', linestyle='--', 
                             label=f"L3 = {cache_sizes['L3'] // (1024*1024)} MB")
         else:
-            # Fallback to hardcoded values
             self.ax.axvline(2**20, color='gray', linestyle='--', label='~L1 = 2^1 B')
             self.ax.axvline(2**23.5, color='orange', linestyle='--', label='~L2 ≈ 2^2 B')
             self.ax.axvline(2**24.5, color='red', linestyle='--', label='~L3 ≈ 2^3 B')
@@ -179,3 +194,51 @@ class LinkedListPage:
         self.ax.legend()
 
         self.canvas.draw()
+
+    def export_to_pdf(self):
+        if not hasattr(self, 'last_data'):
+            messagebox.showwarning("No Data", "Please run a test first.")
+            return
+
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
+            initialfile=f"linked_list_{self.last_data['mode'].lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+        )
+        
+        if not filename:
+            return
+
+        try:
+            with PdfPages(filename) as pdf:
+                pdf.savefig(self.fig, bbox_inches='tight')
+                
+                fig2 = Figure(figsize=(8.5, 11))
+                ax2 = fig2.add_subplot(111)
+                ax2.axis('off')
+                
+                title_text = f"Linked List Test Results - {self.last_data['mode']}\n"
+                title_text += f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                
+                if self.last_data['cache_sizes']:
+                    title_text += "Cache Sizes:\n"
+                    for level, size in self.last_data['cache_sizes'].items():
+                        title_text += f"  {level}: {size / (1024*1024):.2f} MB ({size:,} bytes)\n"
+                    title_text += "\n"
+                
+                title_text += "Measurement Data:\n"
+                title_text += f"{'Size (bytes)':<15} {'Time (s)':<15} {'ns/node':<15}\n"
+                title_text += "-" * 45 + "\n"
+                
+                ns_values = self._ns_per_node(self.last_data['sizes'], self.last_data['times'])
+                for size, time, ns in zip(self.last_data['sizes'], self.last_data['times'], ns_values):
+                    title_text += f"{size:<15} {time:<15.6f} {ns:<15.2f}\n"
+                
+                ax2.text(0.1, 0.9, title_text, transform=ax2.transAxes, 
+                        fontfamily='monospace', fontsize=10, verticalalignment='top')
+                
+                pdf.savefig(fig2, bbox_inches='tight')
+                
+            messagebox.showinfo("Success", f"Exported to {filename}")
+        except Exception as e:
+            messagebox.showerror("Export Failed", str(e))
