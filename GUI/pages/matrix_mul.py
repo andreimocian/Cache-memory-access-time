@@ -61,15 +61,15 @@ class MatrixMulPage:
         self.frame.update_idletasks()
 
         try:
-            sizes_i, times_i = self._run_exe("i")
+            sizes_i, times_i, cache_sizes = self._run_exe("i")
             self.status.config(text="Running ikj…")
             self.frame.update_idletasks()
 
-            sizes_k, times_k = self._run_exe("k")
+            sizes_k, times_k, _ = self._run_exe("k")
             self.status.config(text="Running jki…")
             self.frame.update_idletasks()
 
-            sizes_j, times_j = self._run_exe("j")
+            sizes_j, times_j, _ = self._run_exe("j")
 
         except subprocess.CalledProcessError as e:
             msg = (e.stderr or e.stdout or str(e)).strip()
@@ -86,7 +86,8 @@ class MatrixMulPage:
         self._plot(
             sizes_i, times_i,
             sizes_k, times_k,
-            sizes_j, times_j
+            sizes_j, times_j,
+            cache_sizes
         )
 
         self.status.config(text="Done.")
@@ -105,10 +106,23 @@ class MatrixMulPage:
     @staticmethod
     def _parse_stdout(text: str):
         sizes, times = [], []
+        cache_sizes = {}
         for line in text.splitlines():
             line = line.strip()
             if not line:
                 continue
+            
+            # Parse cache size lines
+            if 'L1 size:' in line:
+                cache_sizes['L1'] = int(line.split(':')[1].split()[0])
+                continue
+            elif 'L2 size:' in line:
+                cache_sizes['L2'] = int(line.split(':')[1].split()[0])
+                continue
+            elif 'L3 size:' in line:
+                cache_sizes['L3'] = int(line.split(':')[1].split()[0])
+                continue
+            
             if not line.startswith("size "):
                 continue
 
@@ -132,14 +146,28 @@ class MatrixMulPage:
             sizes.append(size_bytes)
             times.append(sec)
 
-        return sizes, times
+        return sizes, times, cache_sizes
 
-    def _plot(self, sizes_i, times_i, sizes_k, times_k, sizes_j, times_j):
+    def _plot(self, sizes_i, times_i, sizes_k, times_k, sizes_j, times_j, cache_sizes=None):
         self.ax.clear()
 
-        self.ax.axvline(2**20, color='gray', linestyle='--', label='~L1 = 2^20 B')
-        self.ax.axvline(2**23.5, color='orange', linestyle='--', label='~L2 ≈ 2^23.5 B')
-        self.ax.axvline(2**24.5, color='red', linestyle='--', label='~L3 ≈ 2^24.5 B')
+        print(cache_sizes)
+
+        if cache_sizes:
+            if 'L1' in cache_sizes:
+                self.ax.axvline(cache_sizes['L1'], color='gray', linestyle='--', 
+                               label=f"L1 = {cache_sizes['L1'] // (1024*1024)} MB")
+            if 'L2' in cache_sizes:
+                self.ax.axvline(cache_sizes['L2'], color='orange', linestyle='--', 
+                               label=f"L2 = {cache_sizes['L2'] // (1024*1024)} MB")
+            if 'L3' in cache_sizes:
+                self.ax.axvline(cache_sizes['L3'], color='red', linestyle='--', 
+                               label=f"L3 = {cache_sizes['L3'] // (1024*1024)} MB")
+        else:
+            # Fallback to hardcoded values
+            self.ax.axvline(2**20, color='gray', linestyle='--', label='~L1 = 2^1 B')
+            self.ax.axvline(2**23.5, color='orange', linestyle='--', label='~L2 ≈ 2^2 B')
+            self.ax.axvline(2**24.5, color='red', linestyle='--', label='~L3 ≈ 2^3 B')
 
         self.ax.plot(sizes_i, times_i, marker='o', label='ijk')
         self.ax.plot(sizes_k, times_k, marker='x', label='ikj')

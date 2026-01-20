@@ -81,7 +81,7 @@ class LinkedListPage:
         mode = self.mode_var.get()
 
         try:
-            sizes, secs = self._run_exe(mode=mode)
+            sizes, secs, cache_sizes = self._run_exe(mode=mode)
             if not sizes:
                 raise RuntimeError("No data parsed from program output.")
         except FileNotFoundError:
@@ -102,7 +102,7 @@ class LinkedListPage:
             return
         label = "Sequential" if mode == "s" else "Random"
         series = [(label, sizes, self._ns_per_node(sizes, secs))]
-        self._plot(series)
+        self._plot(series, cache_sizes)
 
         self.status.config(text="Done.")
         self.run_btn.config(state="normal")
@@ -120,27 +120,53 @@ class LinkedListPage:
     @staticmethod
     def _parse_stdout(text: str):
         sizes, secs = [], []
+        cache_sizes = {}
         for line in text.splitlines():
             line = line.strip()
             if not line:
                 continue
+            # Parse cache size lines
+            if 'L1 size:' in line:
+                cache_sizes['L1'] = int(line.split(':')[1].split()[0])
+                continue
+            elif 'L2 size:' in line:
+                cache_sizes['L2'] = int(line.split(':')[1].split()[0])
+                continue
+            elif 'L3 size:' in line:
+                cache_sizes['L3'] = int(line.split(':')[1].split()[0])
+                continue
+            # Parse data lines
             parts = line.split()
             if len(parts) != 2:
                 continue
             sizes.append(int(parts[0]))
             secs.append(float(parts[1]))
-        return sizes, secs
+        return sizes, secs, cache_sizes
 
     @staticmethod
     def _ns_per_node(sizes, secs, sizeof_l=32):
         return [(t * 1e9) / (s / sizeof_l) for s, t in zip(sizes, secs)]
 
-    def _plot(self, series):
+    def _plot(self, series, cache_sizes=None):
         self.ax.clear()
 
-        self.ax.axvline(2**20, color='gray', linestyle='--', label='~L1 = 2^20 B')
-        self.ax.axvline(2**23.5, color='orange', linestyle='--', label='~L2 ≈ 2^23.5 B')
-        self.ax.axvline(2**24.5, color='red', linestyle='--', label='~L3 ≈ 2^24.5 B')
+        print(cache_sizes)
+
+        # if cache_sizes:
+        if 'L1' in cache_sizes:
+            self.ax.axvline(cache_sizes['L1'], color='gray', linestyle='--', 
+                            label=f"L1 = {cache_sizes['L1'] // (1024*1024)} MB")
+        if 'L2' in cache_sizes:
+            self.ax.axvline(cache_sizes['L2'], color='orange', linestyle='--', 
+                            label=f"L2 = {cache_sizes['L2'] // (1024*1024)} MB")
+        if 'L3' in cache_sizes:
+            self.ax.axvline(cache_sizes['L3'], color='red', linestyle='--', 
+                            label=f"L3 = {cache_sizes['L3'] // (1024*1024)} MB")
+        else:
+            # Fallback to hardcoded values
+            self.ax.axvline(2**20, color='gray', linestyle='--', label='~L1 = 2^1 B')
+            self.ax.axvline(2**23.5, color='orange', linestyle='--', label='~L2 ≈ 2^2 B')
+            self.ax.axvline(2**24.5, color='red', linestyle='--', label='~L3 ≈ 2^3 B')
 
         for label, sizes, ns in series:
             self.ax.plot(sizes, ns, marker="o", label=label)

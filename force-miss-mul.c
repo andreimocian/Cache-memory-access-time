@@ -1,9 +1,9 @@
 #include <windows.h>
 #include <stdio.h>
 #include <immintrin.h>
+#include "cache-info/cache-info.h"
 
-#define MAX_SIZE 2050
-#define FINAL_SIZE 2048
+#define MAX_SIZE 4096
 #define START_SIZE 16 // 2^4
 double A[MAX_SIZE][MAX_SIZE];
 double B[MAX_SIZE][MAX_SIZE];
@@ -31,7 +31,7 @@ void ikj_multiply_forced_miss(int n)
             {
                 _mm_clflush(&B[k][j]);
                 _mm_clflush(&C[i][j]);
-                _mm_mfence(); // Ensure compiler does not optimize
+                _mm_mfence();
 
                 C[i][j] += A[i][k] * B[k][j];
             }
@@ -60,6 +60,17 @@ void ikj_flush_only(int n)
 
 int main(int argc, char **argv)
 {
+    CacheSizes sizes = cache_levels_sizes();
+    unsigned long long L1_size = sizes.L1_size;
+    unsigned long long L2_size = sizes.L2_size;
+    unsigned long long L3_size = sizes.L3_size;
+
+    printf("L1 size: %llu bytes\n", L1_size);
+    printf("L2 size: %llu bytes\n", L2_size);
+    printf("L3 size: %llu bytes\n", L3_size);
+
+    const unsigned long FINAL_SIZE = (unsigned long)sqrt(L3_size / (3.0 * sizeof(double)));
+
     if (!QueryPerformanceFrequency(&freq))
     {
         return 1;

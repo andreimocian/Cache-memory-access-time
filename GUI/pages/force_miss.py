@@ -60,16 +60,16 @@ class MatrixMulForceMissPage:
         try:
             self.status.config(text="Running ikj…")
             self.frame.update_idletasks()
-            sizes_ikj, times_ikj = self._run_mode("m")
+            sizes_ikj, times_ikj, cache_sizes = self._run_mode("m")
 
             self.status.config(text="Running force miss…")
             self.frame.update_idletasks()
-            sizes_fm, times_fm = self._run_mode("f")
+            sizes_fm, times_fm, _ = self._run_mode("f")
 
             if not sizes_ikj or not sizes_fm:
                 raise RuntimeError("No data parsed from benchmark output.")
 
-            self._plot(sizes_ikj, times_ikj, sizes_fm, times_fm)
+            self._plot(sizes_ikj, times_ikj, sizes_fm, times_fm, cache_sizes)
             self.status.config(text="Done.")
 
         except subprocess.CalledProcessError as e:
@@ -96,11 +96,24 @@ class MatrixMulForceMissPage:
     def _parse_stdout(text: str):
         """
         Parses lines like:
+          L1 size: 65536 bytes
           size 6144, 0.000010 seconds
         """
         sizes, times = [], []
+        cache_sizes = {}
         for line in text.splitlines():
             line = line.strip()
+            
+            if 'L1 size:' in line:
+                cache_sizes['L1'] = int(line.split(':')[1].split()[0])
+                continue
+            elif 'L2 size:' in line:
+                cache_sizes['L2'] = int(line.split(':')[1].split()[0])
+                continue
+            elif 'L3 size:' in line:
+                cache_sizes['L3'] = int(line.split(':')[1].split()[0])
+                continue
+            
             if not line.startswith("size "):
                 continue
 
@@ -124,14 +137,26 @@ class MatrixMulForceMissPage:
             sizes.append(size_bytes)
             times.append(sec)
 
-        return sizes, times
+        return sizes, times, cache_sizes
 
-    def _plot(self, sizes_ikj, times_ikj, sizes_fm, times_fm):
+    def _plot(self, sizes_ikj, times_ikj, sizes_fm, times_fm, cache_sizes=None):
         self.ax.clear()
 
-        self.ax.axvline(2**20, color='gray', linestyle='--', label='~L1 = 2^20 B')
-        self.ax.axvline(2**23.5, color='orange', linestyle='--', label='~L2 ≈ 2^23.5 B')
-        self.ax.axvline(2**24.5, color='red', linestyle='--', label='~L3 ≈ 2^24.5 B')
+        if cache_sizes:
+            if 'L1' in cache_sizes:
+                self.ax.axvline(cache_sizes['L1'], color='gray', linestyle='--', 
+                               label=f"L1 = {cache_sizes['L1'] // (1024 * 1024)} MB")
+            if 'L2' in cache_sizes:
+                self.ax.axvline(cache_sizes['L2'], color='orange', linestyle='--', 
+                               label=f"L2 = {cache_sizes['L2'] // (1024 * 1024)} MB")
+            if 'L3' in cache_sizes:
+                self.ax.axvline(cache_sizes['L3'], color='red', linestyle='--', 
+                               label=f"L3 = {cache_sizes['L3'] // (1024*1024)} MB")
+        else:
+            # Fallback to hardcoded values
+            self.ax.axvline(2**20, color='gray', linestyle='--', label='~L1 = 2^1 B')
+            self.ax.axvline(2**23.5, color='orange', linestyle='--', label='~L2 ≈ 2^2 B')
+            self.ax.axvline(2**24.5, color='red', linestyle='--', label='~L3 ≈ 2^3 B')
 
         self.ax.plot(sizes_fm, times_fm, marker='o', label='ikj force miss')
         self.ax.plot(sizes_ikj, times_ikj, marker='x', label='ikj')

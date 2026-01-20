@@ -1,11 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <windows.h>
+#include "cache-info/cache-info.h"
 
 #define NPAD 7
 
 #define MIN_SIZE sizeof(struct l)
-#define MAX_SIZE 1073741824
 #define ITERATIONS 10
 
 LARGE_INTEGER freq, start, end;
@@ -75,6 +75,17 @@ void traverse_list(struct l *root)
 }
 
 int main(int argc, char** argv) {
+    CacheSizes sizes = cache_levels_sizes();
+    unsigned long long L1_size = sizes.L1_size;
+    unsigned long long L2_size = sizes.L2_size;
+    unsigned long long L3_size = sizes.L3_size;
+
+    printf("L1 size: %llu bytes\n", L1_size);
+    printf("L2 size: %llu bytes\n", L2_size);
+    printf("L3 size: %llu bytes\n", L3_size);
+
+    const unsigned long MAX_SIZE = L3_size * 2;
+
     struct l* root;
 
     root = calloc(MAX_SIZE / sizeof(struct l), sizeof(struct l));
@@ -110,4 +121,6 @@ int main(int argc, char** argv) {
         printf("%ld %f\n", i, seconds);
     }
     free(root);
+
+    
 }
