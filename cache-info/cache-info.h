@@ -12,4 +12,4 @@ typedef struct {
 
 CacheSizes cache_levels_sizes();
 
-#endif // CACHE_INFO_H
+#endif
